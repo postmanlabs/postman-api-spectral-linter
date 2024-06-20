@@ -1,0 +1,582 @@
+functions:
+  - checkResourceNesting
+  - checkPluralNouns
+  - validateDatefields
+  - oasOpIdUnique
+  - checkExamples
+  - checkPathsHave404Response
+  - checkPathParameters
+
+rules:
+  sem-ver:
+    description: The "info.version" property must contain a valid Semantic Versioning value.
+    formats:
+      - oas3
+    given: $.info
+    then:
+      - field: version
+        function: truthy
+      - field: version
+        function: pattern
+        functionOptions:
+          match: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$
+    message: The "version" property must contain a valid Semantic Versioning value. Found "{{value}}"
+    severity: error
+
+  path-parameters-case:
+    description: API resource names must be in kebab-case and parameters in camelCase.
+    given: $.paths[*]~
+    message: Path is not in the correct case format
+    then:
+      function: pattern
+      functionOptions:
+        match: ^/([a-z0-9]+(-[a-z0-9]+)*)?(/[a-z0-9]+(-[a-z0-9]+)*|/({[a-z][a-zA-Z0-9]*}|\.\*))*$
+    formats:
+      - oas3
+    severity: error
+
+  no-resource-nesting:
+    formats:
+      - oas3
+    given: $.paths[*]~
+    then:
+      function: checkResourceNesting
+    message: Path contains consecutive non-variables
+    description: You cannot nest two API resource names. You must separate them with a path parameter or variable.
+    severity: error
+
+  no-version:
+    description: API resource names cannot contain version details.
+    given: $.paths[*]~
+    message: Path should not contain version details
+    then:
+      function: pattern
+      functionOptions:
+        notMatch: ^.*v\d+.*$
+    formats:
+      - oas3
+    severity: error
+
+  resources-are-plural-nouns:
+    given: $.paths[*]~
+    message: API resource names must be plural nouns
+    then:
+      function: checkPluralNouns
+    description: API resource names must be plural nouns.
+    formats:
+      - oas3
+    severity: error
+
+  date-time-format:
+    given: $
+    message: Dates and times must follow RFC-3339 conventions and use ISO-8601 standard
+    then:
+      function: validateDatefields
+    description: Dates and times must follow the conventions in RFC-3339 and use the ISO-8601 standard.
+    formats:
+      - oas3
+    severity: error
+
+  ids-parameter-format:
+    formats:
+      - oas3
+    description: The "ids" parameter is used to list multiple items and its format is a comma-separated list of IDs.
+    message: The "ids" parameter must be a "string" type with the "^[A-Za-z0-9-]+(,[A-Za-z0-9-]+)*$" Regex pattern
+    given: $..parameters[?(@.name=="ids")].schema
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          properties:
+            type:
+              type: string
+              enum:
+                - string
+            pattern:
+              type: string
+              enum:
+                - ^[A-Za-z0-9-]+(,[A-Za-z0-9-]+)*$
+          required:
+            - type
+            - pattern
+    severity: error
+
+  cursor-parameter-format:
+    formats:
+      - oas3
+    description:
+      The "cursor" parameter indicates a pagination cursor. It must be a
+      "string" type.
+    severity: error
+    given: $..parameters[?(@.name=="cursor")].schema.type
+    message: The "cursor" parameter must be a "string" type
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: string
+          enum:
+            - string
+
+  next-cursor-attribute-format:
+    formats:
+      - oas3
+    description:
+      The "nextCursor" response attribute is the value of a cursor that
+      represents the next page in a data set. It must be a "string" type.
+    severity: error
+    given: $..properties.nextCursor.type
+    message: The "nextCursor" parameter must be a "string" type
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: string
+          enum:
+            - string
+
+  limit-parameter-format:
+    formats:
+      - oas3
+    description: The "limit" parameter indicates the maximum number of items to
+      retrieve. It must be an "integer" type.
+    severity: error
+    given: $..parameters[?(@.name=="limit")].schema.type
+    message: The "limit" parameter must be an "integer" type
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: string
+          enum:
+            - integer
+
+  sort-parameter-format:
+    formats:
+      - oas3
+    description: The "sort" parameter specifies the attribute by which to sort the results. It must be a "string" type.
+    severity: error
+    given: $..parameters[?(@.name=="sort")].schema.type
+    message: The "sort" parameter must be a "string" type
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: string
+          enum:
+            - string
+
+  direction-parameter-format:
+    formats:
+      - oas3
+    description: The "direction" parameter specifies the sorting direction. It must be an enum of "asc" (ascending) and "desc" (descending).
+    severity: error
+    given: $..parameters[?(@.name=="direction")].schema
+    message: 'The "direction" type must be a "string" type and enum: [asc, desc]'
+    then:
+      - field: type
+        function: schema
+        functionOptions:
+          schema:
+            type: string
+            const: string
+      - field: enum
+        function: truthy
+      - field: enum
+        function: schema
+        functionOptions:
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - asc
+                - desc
+
+  since-parameter-format:
+    formats:
+      - oas3
+    description: The "since" parameter gets all items created since the specified timestamp. It must be a "string" type with a "date-time" format.
+    severity: error
+    given: $..parameters[?(@.name=="since")].schema
+    message: The "since" parameter must be a "string" type with "date-time" format
+    then:
+      - field: type
+        function: schema
+        functionOptions:
+          schema:
+            type: string
+            enum:
+              - string
+      - field: format
+        function: truthy
+      - field: format
+        function: schema
+        functionOptions:
+          schema:
+            type: string
+            enum:
+              - date-time
+
+  until-parameter-format:
+    formats:
+      - oas3
+    description: The "until" parameter gets all items created until the specified timestamp. It must be a "string" type with a "date-time" format.
+    severity: error
+    given: $..parameters[?(@.name=="until")].schema
+    message: The "until" parameter must be a "string" type with "date-time" format
+    then:
+      - field: type
+        function: schema
+        functionOptions:
+          schema:
+            type: string
+            enum:
+              - string
+      - field: format
+        function: truthy
+      - field: format
+        function: schema
+        functionOptions:
+          schema:
+            type: string
+            enum:
+              - date-time
+
+  operation_success_response:
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          anyOf:
+            - required:
+                - "2XX"
+              properties:
+                "2XX": true
+            - required:
+                - "200"
+              properties:
+                "200": true
+            - required:
+                - "201"
+              properties:
+                "201": true
+            - required:
+                - "202"
+              properties:
+                "202": true
+            - required:
+                - "203"
+              properties:
+                "203": true
+            - required:
+                - "204"
+              properties:
+                "204": true
+            - required:
+                - "205"
+              properties:
+                "205": true
+            - required:
+                - "206"
+              properties:
+                "206": true
+            - required:
+                - "207"
+              properties:
+                "207": true
+            - required:
+                - "208"
+              properties:
+                "208": true
+            - required:
+                - "226"
+              properties:
+                "226": true
+            - required:
+                - "300"
+              properties:
+                "300": true
+            - required:
+                - "301"
+              properties:
+                "301": true
+            - required:
+                - "302"
+              properties:
+                "302": true
+            - required:
+                - "303"
+              properties:
+                "303": true
+            - required:
+                - "304"
+              properties:
+                "304": true
+            - required:
+                - "305"
+              properties:
+                "305": true
+            - required:
+                - "306"
+              properties:
+                "306": true
+            - required:
+                - "307"
+              properties:
+                "307": true
+            - required:
+                - "308"
+              properties:
+                "308": true
+    given: $.paths.*.*.responses
+    formats:
+      - oas3
+    message: Operation must return a "2xx" or "3xx" HTTP status code
+    severity: error
+    description: Every operation must have at least one "2xx" or "3xx" response.
+
+  operation-operationId-unique:
+    formats:
+      - oas3
+    description: Every operation must have a unique "operationId" value.
+    message: The "operationId" must be a unique value
+    severity: error
+    given: $
+    then:
+      function: oasOpIdUnique
+
+  patch-format:
+    given: $.paths.*.patch.requestBody.content
+    then:
+      field: application/json-patch+json
+      function: truthy
+    severity: error
+    message: PATCH requests must have the "application/json-patch+json" Media Type
+    description: PATCH operations update resources and should accept a JSON Patch document that describes what to update. The accepted body must be in the "application/json-patch+json" Media Type.
+    formats:
+      - oas3
+
+  info-description:
+    formats:
+      - oas3
+    given: $
+    then:
+      field: info.description
+      function: truthy
+    severity: error
+    message: The field "info.description" is required
+    description: The "info.description" property must be present and cannot contain an empty string.
+
+  parameters-examples:
+    formats:
+      - oas3
+    given: "$..parameters[*]"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          anyOf:
+            - properties:
+                examples:
+                  not:
+                    const: {}
+              required:
+                - examples
+            - properties:
+                example:
+                  not:
+                    const: {}
+              required:
+                - example
+            - properties:
+                schema:
+                  type: object
+                  properties:
+                    example:
+                      not:
+                        const: {}
+                  required:
+                    - example
+            - properties:
+                schema:
+                  type: object
+                  properties:
+                    examples:
+                      not:
+                        const: {}
+                  required:
+                    - examples
+    severity: error
+    description: All parameters must include examples.
+    message: All parameters must include examples
+
+  objects-examples:
+    formats:
+      - oas3
+    severity: error
+    description: All object properties must include examples.
+    message: "Property without examples"
+    given:
+      - $..requestBody.content[*]
+      - $..responses[*].content[*]
+    then:
+      function: checkExamples
+
+  existing-401-response:
+    formats:
+      - oas3
+    given:
+      - $.paths[*][*].responses
+    then:
+      field: "401"
+      function: truthy
+    message: Does not contain a 401 response
+    description: Responses must contain a 401 Unauthorized response code.
+    severity: error
+
+  existing-404-response:
+    description: Responses must contain a 404 Not Found response where applicable.
+    formats:
+      - oas3
+    given: $.paths
+    then:
+      function: checkPathsHave404Response
+    message: This path and verb requires a 404 response
+    severity: warn
+
+  path-parameters-in-curly-braces:
+    formats:
+      - oas3
+    given:
+      - $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        notMatch: "/:"
+    message: Paths with incorrect variable names
+    description: Path variables must be inside of curly braces.
+    severity: error
+
+  path-parameters-are-defined:
+    description: Path variables must be defined as parameters.
+    formats:
+      - oas3
+    given: $.paths
+    then:
+      function: checkPathParameters
+    message: Path variable must be defined as a parameter
+    severity: error
+
+  query-parameters-in-camel-case:
+    given: $..parameters[?(@.in=='query')].name
+    then:
+      function: pattern
+      functionOptions:
+        match: ^(^[a-z])[a-zA-Z0-9]*$
+    message: Query parameter in not in camelCase -> "{{value}}"
+    severity: error
+    description: Query parameter names must be in camelCase.
+    formats:
+      - oas3
+
+  error-response-format:
+    formats:
+      - oas3
+    given:
+      - $.paths[*][*].responses[400]
+      - $.paths[*][*].responses[401]
+      - $.paths[*][*].responses[402]
+      - $.paths[*][*].responses[403]
+      - $.paths[*][*].responses[404]
+      - $.paths[*][*].responses[405]
+      - $.paths[*][*].responses[406]
+      - $.paths[*][*].responses[407]
+      - $.paths[*][*].responses[408]
+      - $.paths[*][*].responses[409]
+      - $.paths[*][*].responses[410]
+      - $.paths[*][*].responses[411]
+      - $.paths[*][*].responses[412]
+      - $.paths[*][*].responses[413]
+      - $.paths[*][*].responses[414]
+      - $.paths[*][*].responses[415]
+      - $.paths[*][*].responses[416]
+      - $.paths[*][*].responses[417]
+      - $.paths[*][*].responses[418]
+      - $.paths[*][*].responses[421]
+      - $.paths[*][*].responses[422]
+      - $.paths[*][*].responses[423]
+      - $.paths[*][*].responses[424]
+      - $.paths[*][*].responses[425]
+      - $.paths[*][*].responses[426]
+      - $.paths[*][*].responses[428]
+      - $.paths[*][*].responses[429]
+      - $.paths[*][*].responses[431]
+      - $.paths[*][*].responses[451]
+      - $.paths[*][*].responses[500]
+      - $.paths[*][*].responses[501]
+      - $.paths[*][*].responses[502]
+      - $.paths[*][*].responses[503]
+      - $.paths[*][*].responses[504]
+      - $.paths[*][*].responses[505]
+      - $.paths[*][*].responses[506]
+      - $.paths[*][*].responses[507]
+      - $.paths[*][*].responses[508]
+      - $.paths[*][*].responses[510]
+      - $.paths[*][*].responses[511]
+    then:
+      - field: content
+        function: defined
+      - field: content.application/problem+json
+        function: defined
+      - field: content.application/problem+json.schema
+        function: schema
+        functionOptions:
+          schema:
+            properties:
+              properties:
+                type: object
+                properties:
+                  title:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        enum:
+                          - string
+                  detail:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        enum:
+                          - string
+                  type:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        enum:
+                          - string
+                required:
+                  - title
+                  - detail
+                  - type
+    message: Error response must contain the "type", "title", and "detail" fields
+    severity: warn
+    description: Error responses must follow the RFC 7807 "Problem Details" format. The error response must contain the "type", "title", and "detail" fields.
+
+  mandatory-path-verb-description:
+    formats:
+      - oas3
+    given: $.paths.*[get,post,patch,put,delete,options,head,trace]
+    then:
+      - field: description
+        function: truthy
+      - field: summary
+        function: truthy
+    message: Request and response path verbs must have a description and a summary
+    description: The request and response path verbs must have a description and a summary.
+    severity: warn
