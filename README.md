@@ -1,4 +1,4 @@
-# postman-collection-spectral-linter
+# postman-api-spectral-linter
 
 > This code is part of a blog post and is **not** actively maintained by Postman.
 
